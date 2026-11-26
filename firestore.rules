@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isCoach() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/coaches/$(request.auth.uid));
+    }
+
+    function validPlayer() {
+      let d = request.resource.data;
+      return d.name is string && d.name.size() > 1 && d.name.size() <= 100
+        && d.category is string && d.category.size() > 0
+        && d.status in ['active', 'inactive']
+        && d.guardianConsent is bool;
+    }
+
+    function validTraining() {
+      let d = request.resource.data;
+      return d.date is timestamp
+        && d.category is string && d.category.size() > 0;
+    }
+
+    function validAttendance() {
+      let d = request.resource.data;
+      return d.trainingId is string && d.trainingId.size() > 0
+        && d.playerId is string && d.playerId.size() > 0
+        && d.category is string && d.category.size() > 0
+        && d.date is timestamp
+        && d.present is bool;
+    }
+
+    function validMaterial() {
+      let d = request.resource.data;
+      return d.name is string && d.name.size() > 0 && d.name.size() <= 80
+        && d.totalQuantity is int && d.totalQuantity >= 0
+        && d.availableQuantity is int && d.availableQuantity >= 0
+        && d.availableQuantity <= d.totalQuantity;
+    }
+
+    function validLoan() {
+      let d = request.resource.data;
+      return d.materialId is string && d.materialId.size() > 0
+        && d.materialName is string && d.materialName.size() > 0
+        && d.playerId is string && d.playerId.size() > 0
+        && d.playerName is string && d.playerName.size() > 0
+        && d.quantity is int && d.quantity > 0
+        && d.loanedAt is timestamp
+        && (d.returnedAt == null || d.returnedAt is timestamp)
+        && d.status in ['open', 'returned'];
+    }
+
+    match /coaches/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if false; // criado apenas manualmente pelo console
+    }
+
+    match /players/{id} {
+      allow read: if isCoach();
+      allow create, update: if isCoach() && validPlayer();
+      allow delete: if false;
+    }
+
+    match /trainings/{id} {
+      allow read: if isCoach();
+      allow create, update: if isCoach() && validTraining();
+      allow delete: if false;
+    }
+
+    match /attendance/{id} {
+      allow read: if isCoach();
+      allow create, update: if isCoach() && validAttendance();
+      allow delete: if false;
+    }
+
+    match /materials/{id} {
+      allow read: if isCoach();
+      allow create, update: if isCoach() && validMaterial();
+      allow delete: if false;
+    }
+
+    match /loans/{id} {
+      allow read: if isCoach();
+      allow create, update: if isCoach() && validLoan();
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
